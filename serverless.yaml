@@ -25,7 +25,7 @@ constructs:
     domain: ${self:custom.domains.${sls:stage}}
     # ACM certificate — must be in us-east-1 (required for CloudFront).
     # A wildcard *.trendly.now cert covers both dev and prod domains.
-    certificate: REPLACE_ME  # arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/...
+    certificate: arn:aws:acm:us-east-1:730335628944:certificate/57bf21ac-d530-4ee7-8718-93c24fcb69ba  # arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/...
     # Shown when CloudFront returns a 403/404 (e.g. direct path not found)
     errorPage: /connect/error/index.html
     # Uncomment to redirect dev.connect.trendly.now → connect.trendly.now on prod
@@ -46,7 +46,7 @@ resources:
       Condition: IsDev
       Type: AWS::Route53::RecordSet
       Properties:
-        HostedZoneId: REPLACE_ME  # Route53 hosted zone ID for trendly.now
+        HostedZoneId: Z02250033690XMWB8LXL7  # Route53 hosted zone ID for trendly.now
         Name: dev.connect.trendly.now
         Type: A
         AliasTarget:
@@ -57,7 +57,7 @@ resources:
       Condition: IsProd
       Type: AWS::Route53::RecordSet
       Properties:
-        HostedZoneId: REPLACE_ME  # Route53 hosted zone ID for trendly.now
+        HostedZoneId: Z02250033690XMWB8LXL7  # Route53 hosted zone ID for trendly.now
         Name: connect.trendly.now
         Type: A
         AliasTarget:
