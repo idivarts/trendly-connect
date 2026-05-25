@@ -3,8 +3,8 @@ name: Deploy Trendly Connect
 on:
   push:
     branches:
-      - main   # → prod
-      - dev    # → dev
+      - master  # → prod
+      - dev     # → dev
   workflow_dispatch:
     inputs:
       stage:
@@ -28,26 +28,22 @@ jobs:
       STAGE: >-
         ${{
           github.event_name == 'workflow_dispatch' && inputs.stage
-          || (github.ref == 'refs/heads/main' && 'prod' || 'dev')
+          || (github.ref == 'refs/heads/master' && 'prod' || 'dev')
         }}
 
     steps:
-      # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
-      # ── Dependencies ──────────────────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── Build ─────────────────────────────────────────────────────────────────
       # next build with output:'export' writes static files to out/
       - name: Build Next.js static export
         run: npx next build
@@ -58,7 +54,6 @@ jobs:
           echo "✅ HTML pages : $(find out -name '*.html' | wc -l | tr -d ' ')"
           echo "✅ Export size: $(du -sh out | cut -f1)"
 
-      # ── AWS credentials ───────────────────────────────────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -66,76 +61,51 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # ── Infrastructure deploy ─────────────────────────────────────────────────
-      # Creates/updates: S3 bucket, CloudFront OAC, CloudFront Function,
-      # CloudFront distribution, Route53 A+AAAA records.
-      # Safe to re-run — CloudFormation is idempotent.
-      - name: Deploy infrastructure
-        run: npx serverless deploy --stage ${{ env.STAGE }} --verbose
+      # serverless-lift's static-website construct:
+      #   1. Creates/updates S3 bucket (public, website hosting enabled)
+      #   2. Creates/updates CloudFront distribution + ACM cert attachment
+      #   3. Uploads the out/ directory to S3
+      #   4. Invalidates CloudFront cache
+      # S3 website hosting natively serves index.html for directory paths
+      # (/connect/success/ → connect/success/index.html) — no CloudFront
+      # function needed, which is why static-website is correct here.
+      - name: Deploy with Serverless (infra + initial upload)
+        uses: serverless/github-action@v3.2
+        with:
+          args: deploy --stage ${{ env.STAGE }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      # ── Read stack outputs ────────────────────────────────────────────────────
-      # The serverless.yaml exports BucketName and DistributionId so we can
-      # reference them here without hardcoding.
-      - name: Read CloudFormation stack outputs
-        id: stack
+      # serverless-lift uploads all files with a single content-type pass and
+      # no differentiated cache headers. The three passes below correct that
+      # so Next.js best-practice caching is applied to the live bucket.
+      # (serverless-lift's upload already ran; these overwrite with proper headers.)
+
+      # Pass 1: _next/static — content-hashed JS/CSS chunks, safe to cache 1 year.
+      - name: Set 1-year cache on _next/static assets
         run: |
-          STACK_NAME="trendly-connect-${{ env.STAGE }}"
-
-          BUCKET=$(aws cloudformation describe-stacks \
-            --stack-name "$STACK_NAME" \
-            --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
-            --output text)
-
-          DIST_ID=$(aws cloudformation describe-stacks \
-            --stack-name "$STACK_NAME" \
-            --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' \
-            --output text)
-
-          echo "bucket=$BUCKET"      >> $GITHUB_OUTPUT
-          echo "distribution_id=$DIST_ID" >> $GITHUB_OUTPUT
-
-          echo "S3 bucket      : $BUCKET"
-          echo "CloudFront ID  : $DIST_ID"
-
-      # ── Static file upload (three passes for correct cache headers) ───────────
-
-      # Pass 1: _next/static — content-hashed JS/CSS, safe to cache 1 year.
-      - name: Upload _next/static assets (1-year immutable cache)
-        run: |
-          aws s3 sync out/_next/ s3://${{ steps.stack.outputs.bucket }}/_next/ \
-            --delete \
+          aws s3 sync out/_next/ s3://$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')/_next/ \
             --cache-control "public, max-age=31536000, immutable" \
             --metadata-directive REPLACE
 
-      # Pass 2: HTML pages — always fetch fresh (no CDN caching).
-      - name: Upload HTML pages (no-cache)
+      # Pass 2: HTML pages — always fetch fresh so users get the latest deploy.
+      - name: Set no-cache on HTML pages
         run: |
-          aws s3 sync out/ s3://${{ steps.stack.outputs.bucket }}/ \
-            --delete \
+          BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
+          aws s3 sync out/ s3://$BUCKET/ \
             --exclude "_next/*" \
             --include "*.html" \
             --content-type "text/html; charset=utf-8" \
             --cache-control "public, no-cache, must-revalidate" \
             --metadata-directive REPLACE
 
-      # Pass 3: Everything else (icons, fonts, robots.txt, sitemap) — 1-hour cache.
-      - name: Upload root and SEO files (1-hour cache)
+      # Pass 3: Everything else (favicon, robots.txt, etc.) — 1-hour cache.
+      - name: Set 1-hour cache on root files
         run: |
-          aws s3 sync out/ s3://${{ steps.stack.outputs.bucket }}/ \
+          BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
+          aws s3 sync out/ s3://$BUCKET/ \
             --exclude "_next/*" \
             --exclude "*.html" \
             --cache-control "public, max-age=3600" \
             --metadata-directive REPLACE
-
-      # ── CloudFront cache invalidation ─────────────────────────────────────────
-      # Bust the CDN cache so users immediately see the new HTML pages.
-      # _next/static is excluded here — those files are content-hashed so old
-      # URLs stay valid and new hashes are referenced by the new HTML.
-      - name: Invalidate CloudFront cache
-        run: |
-          INVALIDATION_ID=$(aws cloudfront create-invalidation \
-            --distribution-id ${{ steps.stack.outputs.distribution_id }} \
-            --paths "/*" \
-            --query 'Invalidation.Id' \
-            --output text)
-          echo "Invalidation ID: $INVALIDATION_ID"
