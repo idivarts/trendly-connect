@@ -22,6 +22,7 @@ function ConnectInner() {
   const callbackScheme = params.get('callbackScheme') ?? '';
   const preselected = params.get('platform') as PlatformKey | null;
   const stage = params.get('stage') ?? '';
+  const brandId = params.get('brandId') ?? '';
 
   const [selected, setSelected] = useState<PlatformKey | null>(preselected);
   const [connecting, setConnecting] = useState(false);
@@ -32,7 +33,7 @@ function ConnectInner() {
   function handleConnect(platform: PlatformKey) {
     if (!token || !callbackScheme) return;
     setConnecting(true);
-    const url = buildAuthInitURL({ platform, token, app, callbackScheme, stage });
+    const url = buildAuthInitURL({ platform, token, app, callbackScheme, stage, brandId: brandId || undefined });
     window.location.href = url;
   }
 

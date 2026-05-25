@@ -21,6 +21,7 @@ export function buildAuthInitURL(params: {
   app: string;
   callbackScheme: string;
   stage?: string;
+  brandId?: string;
 }): string {
   const stagePath = params.stage === 'dev' ? '/dev' : '';
   const base = `${BE_URL}${stagePath}/connect/${params.platform}`;
@@ -29,6 +30,7 @@ export function buildAuthInitURL(params: {
     app: params.app,
     callbackScheme: params.callbackScheme,
   });
+  if (params.brandId) query.set('brandId', params.brandId);
   return `${base}?${query.toString()}`;
 }
 
