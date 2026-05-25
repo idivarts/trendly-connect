@@ -1,0 +1,227 @@
+service: trendly-connect
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'dev'}
+  region: us-east-1  # CloudFront + ACM must be us-east-1
+
+# No functions — this is a pure static site.
+# All infrastructure is defined in the resources section below.
+
+custom:
+  # S3 bucket name must be globally unique.
+  # Uses stage suffix so dev and prod don't clash.
+  bucketName: trendly-connect-${sls:stage}
+
+  domains:
+    dev: dev.connect.trendly.now
+    prod: connect.trendly.now
+
+  # Route53 hosted zone for trendly.now
+  # Find this in AWS Console → Route 53 → Hosted zones
+  hostedZoneId: REPLACE_ME  # e.g. Z02250033690XMWB8LXL7
+
+  # ACM certificate ARN — must be in us-east-1 (required for CloudFront)
+  # Create one certificate per domain in ACM, then paste the ARN here.
+  certificateArn:
+    dev: REPLACE_ME   # arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/...
+    prod: REPLACE_ME  # arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/...
+
+resources:
+
+  # ── Conditions ────────────────────────────────────────────────────────────────
+  Conditions:
+    IsDev:
+      Fn::Equals: ["${sls:stage}", "dev"]
+    IsProd:
+      Fn::Equals: ["${sls:stage}", "prod"]
+
+  # ── Resources ─────────────────────────────────────────────────────────────────
+  Resources:
+
+    # ── S3 bucket (private — access via CloudFront OAC only) ──────────────────
+    StaticBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.bucketName}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    # ── Origin Access Control ─────────────────────────────────────────────────
+    # OAC is the modern replacement for Origin Access Identity (OAI).
+    # It grants CloudFront permission to read from the private S3 bucket.
+    OriginAccessControl:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties:
+        OriginAccessControlConfig:
+          Name: ${self:service}-${sls:stage}-oac
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+
+    # ── S3 bucket policy — allow CloudFront OAC ───────────────────────────────
+    BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      DependsOn: CloudFrontDistribution
+      Properties:
+        Bucket: !Ref StaticBucket
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Action: s3:GetObject
+              Resource: !Sub "arn:aws:s3:::${StaticBucket}/*"
+              Condition:
+                StringEquals:
+                  "AWS:SourceArn": !Sub
+                    - "arn:aws:cloudfront::${AWS::AccountId}:distribution/${DistId}"
+                    - DistId: !Ref CloudFrontDistribution
+
+    # ── CloudFront Function — directory index rewrite ─────────────────────────
+    # Next.js static export with trailingSlash:true generates:
+    #   /connect/index.html, /connect/success/index.html, etc.
+    # Without this function, CloudFront returns 403/404 for directory-style
+    # paths because S3 REST API doesn't serve index.html automatically.
+    #
+    # This function rewrites:
+    #   /connect/          →  /connect/index.html
+    #   /connect           →  /connect/index.html  (no extension = page)
+    #   /connect/success/  →  /connect/success/index.html
+    #   /_next/abc.js      →  unchanged            (has extension = asset)
+    DirectoryIndexFunction:
+      Type: AWS::CloudFront::Function
+      Properties:
+        Name: ${self:service}-${sls:stage}-dir-index
+        AutoPublish: true
+        FunctionConfig:
+          Comment: Rewrite directory paths to index.html for Next.js static export
+          Runtime: cloudfront-js-2.0
+        FunctionCode: |
+          function handler(event) {
+            var request = event.request;
+            var uri = request.uri;
+
+            if (uri.endsWith('/')) {
+              // /connect/ → /connect/index.html
+              request.uri += 'index.html';
+            } else if (!uri.split('/').pop().includes('.')) {
+              // /connect/success → /connect/success/index.html
+              request.uri += '/index.html';
+            }
+
+            return request;
+          }
+
+    # ── CloudFront distribution ───────────────────────────────────────────────
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Enabled: true
+          Comment: ${self:service} ${sls:stage}
+          HttpVersion: http2and3
+          IPV6Enabled: true
+          PriceClass: PriceClass_100  # US + Europe (cheapest; adjust if needed)
+          DefaultRootObject: index.html
+
+          Aliases:
+            - ${self:custom.domains.${sls:stage}}
+
+          ViewerCertificate:
+            AcmCertificateArn: ${self:custom.certificateArn.${sls:stage}}
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+
+          Origins:
+            - Id: S3Origin
+              DomainName: !GetAtt StaticBucket.RegionalDomainName
+              # S3OriginConfig must be present (empty OriginAccessIdentity) when using OAC
+              S3OriginConfig:
+                OriginAccessIdentity: ''
+              OriginAccessControlId: !GetAtt OriginAccessControl.Id
+
+          # ── Cache behaviors ────────────────────────────────────────────────
+          # _next/static/* — content-hashed assets, safe to cache for 1 year.
+          # Uses managed CachingOptimized policy.
+          CacheBehaviors:
+            - PathPattern: "_next/static/*"
+              TargetOriginId: S3Origin
+              ViewerProtocolPolicy: redirect-to-https
+              Compress: true
+              # CachingOptimized (AWS managed)
+              CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+          # Default behavior — HTML pages and other assets.
+          # Uses CachingDisabled so CloudFront always checks S3 and respects
+          # the Cache-Control headers set during S3 sync (no-cache for HTML,
+          # 1-hour for icons/fonts etc.).
+          DefaultCacheBehavior:
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            # CachingDisabled (AWS managed) — rely on S3 object Cache-Control headers
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DirectoryIndexFunction.FunctionARN
+
+          CustomErrorResponses:
+            # On 403 (S3 key not found), serve 404 page
+            - ErrorCode: 403
+              ResponseCode: 404
+              ResponsePagePath: /connect/error/index.html
+              ErrorCachingMinTTL: 10
+            - ErrorCode: 404
+              ResponseCode: 404
+              ResponsePagePath: /connect/error/index.html
+              ErrorCachingMinTTL: 10
+
+    # ── Route53 A record ──────────────────────────────────────────────────────
+    # Z2FDTNDATAQYW2 is the CloudFront hosted zone ID — this value is constant
+    # across all AWS accounts and regions.
+    Route53Record:
+      Type: AWS::Route53::RecordSet
+      Properties:
+        HostedZoneId: ${self:custom.hostedZoneId}
+        Name: ${self:custom.domains.${sls:stage}}
+        Type: A
+        AliasTarget:
+          HostedZoneId: Z2FDTNDATAQYW2
+          DNSName: !GetAtt CloudFrontDistribution.DomainName
+          EvaluateTargetHealth: false
+
+    Route53RecordIPv6:
+      Type: AWS::Route53::RecordSet
+      Properties:
+        HostedZoneId: ${self:custom.hostedZoneId}
+        Name: ${self:custom.domains.${sls:stage}}
+        Type: AAAA
+        AliasTarget:
+          HostedZoneId: Z2FDTNDATAQYW2
+          DNSName: !GetAtt CloudFrontDistribution.DomainName
+          EvaluateTargetHealth: false
+
+  # ── Outputs ───────────────────────────────────────────────────────────────────
+  # These are read by the deploy workflow to get the bucket name and
+  # CloudFront distribution ID for the S3 sync and cache invalidation steps.
+  Outputs:
+    BucketName:
+      Value: !Ref StaticBucket
+      Export:
+        Name: ${self:service}-${sls:stage}-bucket
+
+    DistributionId:
+      Value: !Ref CloudFrontDistribution
+      Export:
+        Name: ${self:service}-${sls:stage}-distribution-id
+
+    DistributionDomain:
+      Value: !GetAtt CloudFrontDistribution.DomainName
+      Export:
+        Name: ${self:service}-${sls:stage}-domain
