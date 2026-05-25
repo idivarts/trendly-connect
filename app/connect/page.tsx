@@ -21,7 +21,11 @@ function ConnectInner() {
   const app = params.get('app') ?? 'users';
   const callbackScheme = params.get('callbackScheme') ?? '';
   const preselected = params.get('platform') as PlatformKey | null;
-  const stage = params.get('stage') ?? '';
+  // Prefer explicit ?stage= param; fall back to hostname-based detection
+  // so dev.connect.trendly.now always routes to the dev backend.
+  const stageParam = params.get('stage') ?? '';
+  const autoDev = typeof window !== 'undefined' && window.location.hostname.startsWith('dev.');
+  const stage = stageParam || (autoDev ? 'dev' : '');
   const brandId = params.get('brandId') ?? '';
 
   const [selected, setSelected] = useState<PlatformKey | null>(preselected);

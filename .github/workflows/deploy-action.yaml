@@ -82,30 +82,30 @@ jobs:
       # so Next.js best-practice caching is applied to the live bucket.
       # (serverless-lift's upload already ran; these overwrite with proper headers.)
 
-      # Pass 1: _next/static — content-hashed JS/CSS chunks, safe to cache 1 year.
-      - name: Set 1-year cache on _next/static assets
-        run: |
-          aws s3 sync out/_next/ s3://$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')/_next/ \
-            --cache-control "public, max-age=31536000, immutable" \
-            --metadata-directive REPLACE
+      # # Pass 1: _next/static — content-hashed JS/CSS chunks, safe to cache 1 year.
+      # - name: Set 1-year cache on _next/static assets
+      #   run: |
+      #     aws s3 sync out/_next/ s3://$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')/_next/ \
+      #       --cache-control "public, max-age=31536000, immutable" \
+      #       --metadata-directive REPLACE
 
-      # Pass 2: HTML pages — always fetch fresh so users get the latest deploy.
-      - name: Set no-cache on HTML pages
-        run: |
-          BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
-          aws s3 sync out/ s3://$BUCKET/ \
-            --exclude "_next/*" \
-            --include "*.html" \
-            --content-type "text/html; charset=utf-8" \
-            --cache-control "public, no-cache, must-revalidate" \
-            --metadata-directive REPLACE
+      # # Pass 2: HTML pages — always fetch fresh so users get the latest deploy.
+      # - name: Set no-cache on HTML pages
+      #   run: |
+      #     BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
+      #     aws s3 sync out/ s3://$BUCKET/ \
+      #       --exclude "_next/*" \
+      #       --include "*.html" \
+      #       --content-type "text/html; charset=utf-8" \
+      #       --cache-control "public, no-cache, must-revalidate" \
+      #       --metadata-directive REPLACE
 
-      # Pass 3: Everything else (favicon, robots.txt, etc.) — 1-hour cache.
-      - name: Set 1-hour cache on root files
-        run: |
-          BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
-          aws s3 sync out/ s3://$BUCKET/ \
-            --exclude "_next/*" \
-            --exclude "*.html" \
-            --cache-control "public, max-age=3600" \
-            --metadata-directive REPLACE
+      # # Pass 3: Everything else (favicon, robots.txt, etc.) — 1-hour cache.
+      # - name: Set 1-hour cache on root files
+      #   run: |
+      #     BUCKET=$(npx serverless info --stage ${{ env.STAGE }} --verbose | grep 'assetsBucketName' | awk '{print $2}')
+      #     aws s3 sync out/ s3://$BUCKET/ \
+      #       --exclude "_next/*" \
+      #       --exclude "*.html" \
+      #       --cache-control "public, max-age=3600" \
+      #       --metadata-directive REPLACE
