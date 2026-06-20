@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 8083",
     "build": "./export.sh && ./deploy-s3.sh",
-    "start": "npx serve out",
+    "run": "npx serve out",
+    "start": "npm run dev",
     "lint": "next lint"
   },
   "dependencies": {
