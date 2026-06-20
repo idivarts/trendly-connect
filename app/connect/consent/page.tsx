@@ -1,11 +1,11 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
 import PlatformIcon from '@/components/PlatformIcon';
 import Shell, { SpinnerIcon } from '@/components/Shell';
-import { PLATFORMS, type PlatformKey } from '@/lib/platforms';
 import { buildAuthInitURL } from '@/lib/config';
+import { PLATFORMS, type PlatformKey } from '@/lib/platforms';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 
 // ─── Per-platform consent landing ────────────────────────────────────────────
 // Reached from /connect once a platform is chosen. Mirrors the Phyllo pattern:
@@ -86,9 +86,9 @@ function ConsentInner() {
       <div className="w-full max-w-sm mx-auto space-y-7 animate-fade-up">
         {/* ── Logo bridge: Trendly ⇄ platform ─────────────────────────────── */}
         <div className="flex items-center justify-center gap-3">
-          <div className="w-14 h-14 p-[6px] rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+          <div className="w-14 h-14 p-[14px] rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Trendly" className="max-w-full max-h-full w-auto h-auto object-contain" />
+            <img src="/trendly-symbol-white.png" alt="Trendly" className="max-w-full max-h-full w-auto h-auto object-contain" />
           </div>
           <div className="flex items-center gap-1 text-slate-500">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
