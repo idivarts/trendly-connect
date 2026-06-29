@@ -1,4 +1,6 @@
-export type PlatformKey = 'instagram' | 'facebook' | 'youtube' | 'linkedin' | 'twitter';
+import { REDDIT_ENABLED } from './config';
+
+export type PlatformKey = 'instagram' | 'facebook' | 'youtube' | 'linkedin' | 'linkedin_page' | 'twitter' | 'reddit';
 
 export interface Platform {
   key: PlatformKey;
@@ -41,11 +43,20 @@ export const PLATFORMS: Record<PlatformKey, Platform> = {
   linkedin: {
     key: 'linkedin',
     label: 'LinkedIn',
-    description: 'Connect your LinkedIn profile to share professional reach and engagement.',
+    description: 'Connect your personal LinkedIn profile to schedule and publish posts.',
     color: 'bg-sky-700',
     textColor: 'text-sky-400',
     borderColor: 'border-sky-500/30',
-    scopes: ['Profile info', 'Connection count', 'Post impressions', 'Follower demographics'],
+    scopes: ['Profile info', 'Publish posts to your profile'],
+  },
+  linkedin_page: {
+    key: 'linkedin_page',
+    label: 'LinkedIn Page',
+    description: 'Connect a LinkedIn Company/Showcase Page you administer to post, manage comments and view insights.',
+    color: 'bg-sky-700',
+    textColor: 'text-sky-400',
+    borderColor: 'border-sky-500/30',
+    scopes: ['Page posting', 'Comments management', 'Follower & post insights'],
   },
   twitter: {
     key: 'twitter',
@@ -56,12 +67,18 @@ export const PLATFORMS: Record<PlatformKey, Platform> = {
     borderColor: 'border-slate-500/30',
     scopes: ['Profile info', 'Follower count', 'Tweet reach', 'Engagement metrics'],
   },
+  reddit: {
+    key: 'reddit',
+    label: 'Reddit',
+    description: 'Connect your Reddit account to post to subreddits and manage comments.',
+    color: 'bg-orange-600',
+    textColor: 'text-orange-400',
+    borderColor: 'border-orange-500/30',
+    scopes: ['Identity', 'Submit posts', 'Read & reply to comments'],
+  },
 };
 
-export const PLATFORM_ORDER: PlatformKey[] = [
-  'instagram',
-  'facebook',
-  'youtube',
-  'linkedin',
-  'twitter',
-];
+// Reddit is gated by REDDIT_ENABLED — hidden from the picker until enabled.
+export const PLATFORM_ORDER: PlatformKey[] = (
+  ['instagram', 'facebook', 'youtube', 'linkedin', 'linkedin_page', 'twitter', 'reddit'] as PlatformKey[]
+).filter((p) => p !== 'reddit' || REDDIT_ENABLED);

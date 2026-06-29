@@ -1,5 +1,14 @@
 const IS_DEV = process.env.NODE_ENV === 'development';
 
+/**
+ * Feature flag — gates the Reddit integration in the connect portal (the Reddit
+ * picker tile). Built but PAUSED until the Reddit app + commercial Data API
+ * access are set up (see backend-sls/docs/reddit-integration-setup.md). Keep in
+ * sync with the backend (`internal/constants/features.go` RedditEnabled) and the
+ * brand app (`constants/features.ts` REDDIT_ENABLED).
+ */
+export const REDDIT_ENABLED = false;
+
 export const BE_URL = IS_DEV
   ? 'http://localhost:3001'
   : 'https://be.trendly.now';
