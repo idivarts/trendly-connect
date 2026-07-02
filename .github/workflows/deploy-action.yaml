@@ -18,6 +18,12 @@ jobs:
   deploy:
     name: deploy
     runs-on: ubuntu-latest
+    # Mirrors STAGE so a workflow_dispatch override picks the right environment too.
+    environment: >-
+      ${{
+        github.event_name == 'workflow_dispatch' && inputs.stage
+        || (github.ref == 'refs/heads/master' && 'prod' || 'dev')
+      }}
     strategy:
       matrix:
         node-version: [20.x]
