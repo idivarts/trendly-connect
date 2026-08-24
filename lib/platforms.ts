@@ -1,4 +1,4 @@
-import { REDDIT_ENABLED } from './config';
+import { LINKEDIN_PAGE_ENABLED, REDDIT_ENABLED } from './config';
 
 export type PlatformKey = 'instagram' | 'facebook' | 'youtube' | 'linkedin' | 'linkedin_page' | 'twitter' | 'reddit';
 
@@ -78,7 +78,8 @@ export const PLATFORMS: Record<PlatformKey, Platform> = {
   },
 };
 
-// Reddit is gated by REDDIT_ENABLED — hidden from the picker until enabled.
+// Reddit is gated by REDDIT_ENABLED, LinkedIn Page by LINKEDIN_PAGE_ENABLED —
+// both hidden from the picker until enabled.
 export const PLATFORM_ORDER: PlatformKey[] = (
   ['instagram', 'facebook', 'youtube', 'linkedin', 'linkedin_page', 'twitter', 'reddit'] as PlatformKey[]
-).filter((p) => p !== 'reddit' || REDDIT_ENABLED);
+).filter((p) => (p !== 'reddit' || REDDIT_ENABLED) && (p !== 'linkedin_page' || LINKEDIN_PAGE_ENABLED));
