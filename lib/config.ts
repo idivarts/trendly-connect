@@ -9,6 +9,16 @@ const IS_DEV = process.env.NODE_ENV === 'development';
  */
 export const REDDIT_ENABLED = false;
 
+/**
+ * Feature flag — gates the LinkedIn Page (Company/Showcase Page) picker tile
+ * only; personal LinkedIn stays enabled. Company Page access requires
+ * LinkedIn's Community Management API app review, which is taking too long,
+ * so this is PAUSED until that review clears. Keep in sync with the backend
+ * (`internal/constants/features.go` LinkedInPageEnabled) and the brand app
+ * (`constants/features.ts` LINKEDIN_PAGE_ENABLED).
+ */
+export const LINKEDIN_PAGE_ENABLED = false;
+
 export const BE_URL = IS_DEV
   ? 'http://localhost:3001'
   : 'https://be.trendly.now';
