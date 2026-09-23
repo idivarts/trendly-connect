@@ -52,6 +52,18 @@ jobs:
 
       # next build with output:'export' writes static files to out/
       - name: Build Next.js static export
+        # NEXT_PUBLIC_* is inlined at build time — a static export has no server
+        # to read env at runtime, so the stage must be baked in HERE. Note that
+        # NODE_ENV is "production" for both deploys and cannot be used for this.
+        #
+        # PostHog has no environment dimension of its own (its guidance is a
+        # separate PROJECT per environment), so the key IS the separation. The
+        # prod key is shared with the brand app and marketing site on purpose:
+        # all three are on *.trendly.now, so one distinct_id spans them.
+        env:
+          NEXT_PUBLIC_APP_STAGE: ${{ env.STAGE }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ env.STAGE == 'prod' && vars.POSTHOG_KEY_PROD || vars.POSTHOG_KEY_DEV }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
         run: npx next build
 
       - name: Verify build output
