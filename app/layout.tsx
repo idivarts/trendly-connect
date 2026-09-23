@@ -1,3 +1,4 @@
+import PostHogProvider from '@/components/PostHogProvider';
 import type { Metadata } from 'next';
 import './globals.css';
 
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="font-sans antialiased bg-ink-900 text-slate-100 min-h-dvh">
+        <PostHogProvider />
         {children}
       </body>
     </html>
